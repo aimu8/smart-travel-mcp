@@ -1,13 +1,8 @@
 from typing import Any
-
 import httpx
 from mcp.server.fastmcp import FastMCP
 
-mcp = FastMCP(
-    "TravelWeatherMCP",
-    stateless_http=True,
-    streamable_http_path="/",
-)
+mcp = FastMCP("TravelWeatherMCP", stateless_http=True)
 
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
@@ -31,94 +26,65 @@ def weather_code_to_text(code: int | None) -> str:
 
 async def geocode_city(city: str) -> dict[str, Any]:
     async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.get(GEOCODE_URL, params={"name": city, "count": 1})
-        response.raise_for_status()
-        data = response.json()
+        resp = await client.get(
+            GEOCODE_URL,
+            params={"name": city, "count": 1}
+        )
+        resp.raise_for_status()
+        data = resp.json()
 
     results = data.get("results", [])
     if not results:
-        raise ValueError(f"Could not find city '{city}'")
+        raise ValueError(f"City not found: {city}")
 
     place = results[0]
+
     return {
-        "name": place.get("name"),
-        "country": place.get("country"),
-        "latitude": place.get("latitude"),
-        "longitude": place.get("longitude"),
+        "city": place["name"],
+        "country": place["country"],
+        "latitude": place["latitude"],
+        "longitude": place["longitude"],
     }
 
 
-async def fetch_weather(latitude: float, longitude: float, days: int = 3) -> dict[str, Any]:
+async def fetch_weather(lat: float, lon: float) -> dict[str, Any]:
     params = {
-        "latitude": latitude,
-        "longitude": longitude,
-        "current": "temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code",
-        "daily": "weather_code,temperature_2m_max,temperature_2m_min",
-        "forecast_days": days,
-        "timezone": "auto",
+        "latitude": lat,
+        "longitude": lon,
+        "current": "temperature_2m,wind_speed_10m,weather_code",
     }
 
     async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.get(FORECAST_URL, params=params)
-        response.raise_for_status()
-        return response.json()
+        resp = await client.get(FORECAST_URL, params=params)
+        resp.raise_for_status()
+        return resp.json()
 
 
 @mcp.tool()
-async def get_current_weather(city: str) -> dict[str, Any]:
-    """Get the current weather for a city."""
+async def get_current_weather(city: str) -> dict:
+    """Get current weather for a city."""
     place = await geocode_city(city)
-    weather = await fetch_weather(place["latitude"], place["longitude"], days=1)
+    weather = await fetch_weather(place["latitude"], place["longitude"])
 
     current = weather.get("current", {})
-    weather_text = weather_code_to_text(current.get("weather_code"))
 
     return {
-        "city": place["name"],
+        "city": place["city"],
         "country": place["country"],
-        "current_weather": {
-            "temperature_c": current.get("temperature_2m"),
-            "feels_like_c": current.get("apparent_temperature"),
-            "humidity_percent": current.get("relative_humidity_2m"),
-            "wind_speed_kmh": current.get("wind_speed_10m"),
-            "weather_code": current.get("weather_code"),
-            "weather_text": weather_text,
-        },
+        "temperature_c": current.get("temperature_2m"),
+        "wind_kmh": current.get("wind_speed_10m"),
+        "condition": weather_code_to_text(current.get("weather_code")),
     }
 
 
 @mcp.tool()
-async def get_weather_forecast(city: str, days: int = 3) -> dict[str, Any]:
-    """Get a short weather forecast for a city."""
-    if days < 1:
-        days = 1
-    if days > 7:
-        days = 7
-
-    place = await geocode_city(city)
-    weather = await fetch_weather(place["latitude"], place["longitude"], days=days)
-
-    daily = weather.get("daily", {})
-    times = daily.get("time", [])
-    max_temps = daily.get("temperature_2m_max", [])
-    min_temps = daily.get("temperature_2m_min", [])
-    codes = daily.get("weather_code", [])
-
-    forecast = []
-    for i in range(len(times)):
-        forecast.append(
-            {
-                "date": times[i],
-                "max_temp_c": max_temps[i] if i < len(max_temps) else None,
-                "min_temp_c": min_temps[i] if i < len(min_temps) else None,
-                "weather_code": codes[i] if i < len(codes) else None,
-                "weather_text": weather_code_to_text(codes[i] if i < len(codes) else None),
-            }
-        )
+async def get_trip_weather(from_city: str, to_city: str) -> dict:
+    """Compare weather between two cities."""
+    origin = await get_current_weather(from_city)
+    destination = await get_current_weather(to_city)
 
     return {
-        "city": place["name"],
-        "country": place["country"],
-        "forecast_days": days,
-        "forecast": forecast,
+        "from": origin,
+        "to": destination,
+        "summary": f"{from_city} is {origin['temperature_c']}°C, {to_city} is {destination['temperature_c']}°C"
     }
