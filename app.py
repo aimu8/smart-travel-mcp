@@ -1,6 +1,8 @@
 from contextlib import AsyncExitStack, asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+
 from mcp_server import mcp
 
 
