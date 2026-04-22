@@ -16,19 +16,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Smart Travel MCP", lifespan=lifespan)
 
-# Fix Azure host header issue
 app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=["*"]
 )
 
-app.mount("/mcp", mcp.streamable_http_app())
-
+app.mount(
+    "/mcp",
+    mcp.streamable_http_app(
+        stateless_http=True,
+        streamable_http_path="/",
+    ),
+)
 
 @app.get("/health")
 async def health():
     return JSONResponse({"status": "healthy"})
-
 
 @app.get("/")
 def root():
