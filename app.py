@@ -2,8 +2,6 @@ from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from starlette.middleware.trustedhost import TrustedHostMiddleware
-
 from mcp_server import mcp
 
 
@@ -16,11 +14,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Smart Travel MCP", lifespan=lifespan)
 
-app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=["*"]
-)
-
 
 @app.get("/health")
 async def health():
@@ -32,7 +25,6 @@ def root():
     return {"message": "Smart Travel MCP running"}
 
 
-# Mount MCP at root so its internal /mcp path becomes external /mcp
 app.mount(
     "/mcp",
     mcp.streamable_http_app(),
