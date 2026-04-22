@@ -34,8 +34,8 @@ def root():
 
 # Mount MCP at root so its internal /mcp path becomes external /mcp
 app.mount(
-    "/",
+    "/mcp",
     mcp.streamable_http_app(
         stateless_http=True,
-    ),
+        streamable_http_path="/mcp"    ),
 )
