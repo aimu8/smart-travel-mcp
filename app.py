@@ -21,18 +21,21 @@ app.add_middleware(
     allowed_hosts=["*"]
 )
 
-app.mount(
-    "/mcp",
-    mcp.streamable_http_app(
-        stateless_http=True,
-        streamable_http_path="/",
-    ),
-)
 
 @app.get("/health")
 async def health():
     return JSONResponse({"status": "healthy"})
 
+
 @app.get("/")
 def root():
     return {"message": "Smart Travel MCP running"}
+
+
+# Mount MCP at root so its internal /mcp path becomes external /mcp
+app.mount(
+    "/",
+    mcp.streamable_http_app(
+        stateless_http=True,
+    ),
+)
